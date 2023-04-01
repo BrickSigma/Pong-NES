@@ -112,88 +112,54 @@
 .endproc
 
 .proc move_ball
-    ; Change the Y position
-    lda vel
-    and #%00001000  ; Check if the Y vel is negative
-    cmp #%00001000
-    beq negative_y
-        lda vel         ; Not negative
-        and #%00001111  ; Extract the Y vel from the byte
-        jmp cont_y
-    negative_y:
-        lda vel
-        and #%00001111
-        ora #%11110000  ; Make Y a 8 bit signed integer instead of 4
-    cont_y:
-    clc
-    adc ball_y
-    sta ball_y
-
     ; Change the X position
-    lda vel
-    and #%10000000  ; Check if the X vel is negative
-    cmp #%10000000
-    beq negative_x
-        lda vel         ; Shift the X vel to the lower bit
-        lsr A
-        lsr A
-        lsr A
-        lsr A
-        jmp cont_x
-    negative_x:
-        lda vel
-        lsr A
-        lsr A
-        lsr A
-        lsr A
-        ora #%11110000  ; Make X a 8 bit signed integer instead of 4
-    cont_x:
+    lda ball_x
     clc
-    adc ball_x
+    adc x_vel
     sta ball_x
+
+    ; Change the Y position
+    lda ball_y
+    clc
+    adc y_vel
+    sta ball_y
 
     ; Wall collision check
     ; Check if the ball's y_pos is between 16 <= Y < 208
     ; Set the Y velocity to negative if the ball collides with the wall
     ldx ball_y
-    ldy #14    ; Y position to set the ball if it goes past the screen
-    cpx #14    ; Check if the Y position is less than 14
+    ldy #22    ; Y position to set the ball if it goes past the screen
+    cpx #22    ; Check if the Y position is less than 22
     bcc change_vel_y
-        ldy #210
+        ldy #219
         ldx ball_y
-        cpx #210   ; Check if the Y position is greater than 210
+        cpx #219   ; Check if the Y position is greater than 219
         bcs change_vel_y
-        jmp cont_vel_y
+            jmp cont_vel_y
     change_vel_y:
-        sty ball_y
-        lda vel
-        and #%00001111
-        eor #$FF
-        clc
-        adc #%00000001
-        and #%00001111
-        sta temp_vel
-        lda vel
-        and #%11110000
-        ora temp_vel
-        sta vel
+        ;sty ball_y  ; Store y position of ball at edge of screen
+        lda y_vel
+        jsr negative
+        sta y_vel
     cont_vel_y:
 
     ; Check if the ball has hit the left/right edge of the screen
     ; Reset its position if it has
     ldx ball_x
-    cpx #12    ; Check if the X position is less than 12
+    cpx #21    ; Check if the X position is less than 21
     bcc reset_ball
         ldx ball_x
-        cpx #228   ; Check if the X position is greater than 228
+        cpx #235   ; Check if the X position is greater than 235
         bcs reset_ball
-        jmp cont_vel_x
-    reset_ball:
-        ldx #%11010010
-        stx vel
-        ldx #120
+            jmp cont_vel_x
+    reset_ball:    ; Reset ball velocity and position
+        ldx #%11111101
+        stx x_vel
+        ldx #2
+        stx y_vel
+        ldx #128
         stx ball_x
-        ldx #112
+        ldx #120
         stx ball_y
     cont_vel_x:
 
@@ -202,25 +168,26 @@
 
 .proc draw_ball
     ; Offset the y position
-    ldx ball_y
-    dex
-    stx drawn_y_pos
+    lda ball_y
+    sec
+    sbc #9
+    sta drawn_y_pos
 
     ; Draw upper-left part of ball
-    txa
     sta $0200
-    ldy #$02  ; Tile index of ball in pattern table
-    sty $0201
+    ldx #$02  ; Tile index of ball in pattern table
+    stx $0201
     lda ball_x
+    sec
+    sbc #8
+    sta drawn_x_pos
     sta $0203
 
     ; Draw upper-right part of ball
     lda drawn_y_pos
     sta $0204
-    sty $0205
+    stx $0205
     lda ball_x
-    clc
-    adc #8
     sta $0207
 
     ; Draw lower-left part of ball
@@ -228,8 +195,8 @@
     clc
     adc #8
     sta $0208
-    sty $0209
-    lda ball_x
+    stx $0209
+    lda drawn_x_pos
     sta $020B
 
     ; Draw lower-right part of ball
@@ -237,10 +204,8 @@
     clc
     adc #8
     sta $020C
-    sty $020D
+    stx $020D
     lda ball_x
-    clc
-    adc #8
     sta $020F
 
     ; Set the rotation/flipping for each ball tile
@@ -260,49 +225,79 @@
     rts
 .endproc
 
+; Absolute function
+; Returns the absolute value of the signed byte in register A
+.proc abs
+    tax
+    and #%10000000
+    cmp #%10000000  ; Check if the number is negative
+    beq negative
+        txa
+        rts
+    negative:
+        txa
+        eor #$FF
+        clc
+        adc #1
+        rts
+.endproc
+
+; Reverses the sign on  a byte stored in register A
+.proc negative
+    eor #$FF
+    clc
+    adc #1
+    rts
+.endproc
+
 .proc player_ball_collision
     lda ball_x
-    cmp #31     ; Check whether the ball has passed player 1 x pos
+    cmp #38     ; Check whether the ball has passed player1 X position
     bcc passed_x1
         jmp cont1  ; No collision occured
     passed_x1:
         lda player1_y
         sec
-        sbc #11
+        sbc #6
         cmp ball_y
         bcc passed_y1  ; Check if the ball is in between the top and bottom of the paddle
             jmp cont1  ; No collision occured
     passed_y1:
         lda player1_y
         clc
-        adc #18
+        adc #29
         cmp ball_y
         bcs collision1
             jmp cont1
     collision1:  ; Collision occured
-        jsr reverse_X_vel
+        lda x_vel
+        jsr abs
+        sta x_vel
     cont1:
 
     lda ball_x
-    cmp #210     ; Check whether the ball has passed player 2 x pos
+    cmp #219     ; Check whether the ball has passed player2 X position
     bcs passed_x2
         jmp cont2
     passed_x2:
         lda player2_y
         sec
-        sbc #11
+        sbc #6
         cmp ball_y
         bcc passed_y2
             jmp cont2
     passed_y2:
         lda player2_y
         clc
-        adc #18
+        adc #29
         cmp ball_y
         bcs collision2
             jmp cont2
     collision2:
-        jsr reverse_X_vel
+        lda x_vel
+        jsr abs
+        jsr negative
+        sta x_vel
     cont2:
 
     rts
@@ -318,14 +313,14 @@
         lda pad1
         and #BTN_DOWN
         bne player1_down
-        jmp player1_cont
+            jmp player1_cont
     player1_down:
         inx
         inx
         inx
         cpx #200
         bcs set_down1
-        jmp player1_cont
+            jmp player1_cont
         set_down1:
             ldx #200
             jmp player1_cont
@@ -335,11 +330,11 @@
         dex
         cpx #16
         bcc set_up1
-        jmp player1_cont
+            jmp player1_cont
         set_up1:
             ldx #16
     player1_cont:
-    stx player1_y
+        stx player1_y
 
     lda pad2
     ldx player2_y
@@ -378,7 +373,7 @@
     ldx player1_y
     dex
     txa
-    ldy #$10  ; Low bit address for player1
+    ldy #$10  ; Low bit address for player1 in OAM
     player1:
         sta $0200,Y
         clc
@@ -451,24 +446,6 @@
     rts
 .endproc
 
-; Reverse the X velocity
-; No need for a Y velocity variant as it is only used once
-.proc reverse_X_vel
-    lda vel
-    and #%11110000
-    eor #$FF
-    clc
-    adc #%00010000
-    and #%11110000
-    sta temp_vel
-    lda vel
-    and #%00001111
-    ora temp_vel
-    sta vel
-
-    rts
-.endproc
-
 .import irq_handler
 .import nmi_handler
 .import reset_handler
@@ -497,22 +474,20 @@
     sta PPUDATA
     sta PPUDATA
 
-    ; Set the ball velocity to (3, 2) and it's position (120, 112)
-    ldx #%11010010
-    stx vel
-    ldx #120
+    ; Set the ball velocity to (-3, 2) and it's position (120, 112)
+    ldx #%11111101
+    stx x_vel
+    ldx #2
+    stx y_vel
+    ldx #128
     stx ball_x
-    ldx #112
+    ldx #120
     stx ball_y
 
     ; Set the player Y position
     ldx #108
     stx player1_y
     stx player2_y
-
-    ; Set ball_collide to false
-    ldx #%00000001
-    stx ball_collide
 
     ; Draw the border and ball
     jsr draw_border
@@ -526,9 +501,9 @@ game_loop:
     ldx frame_counter
     inx
     cpx #2
-    beq move_ball_jmp
+    beq move_objects
         jmp continue
-    move_ball_jmp:
+    move_objects:
         jsr move_ball
         jsr move_players
         jsr player_ball_collision
