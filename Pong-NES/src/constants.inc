@@ -19,3 +19,11 @@ BTN_START   = %00010000
 BTN_SELECT  = %00100000
 BTN_B       = %01000000
 BTN_A       = %10000000
+
+; Player related constants
+player1_x = 24        ; X position of player 1
+player2_x = 224       ; X position of player 2
+paddle_height = 24
+ball_radius = 6
+collision_wall1 = 38  ; Used for ball/player collision detection...
+collision_wall2 = 219 ; ...
